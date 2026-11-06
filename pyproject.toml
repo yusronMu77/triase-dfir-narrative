@@ -1,0 +1,6 @@
+[project]
+name = "astria-narrative"
+version = "0.0.0"
+description = "Narasi model bahasa; setiap klaim menunjuk ID bukti."
+requires-python = ">=3.14"
+dependencies = []
