@@ -16,6 +16,17 @@ def test_health_and_ready_without_dependencies() -> None:
         assert "astria_service_info" in client.get("/metrics").text
 
 
+def test_card_consumer_is_wired_when_db_and_nats_configured() -> None:
+    url = SecretStr("postgresql+psycopg://u:p@postgres:5432/narrative_dev")
+    app = build_app(Settings(env="dev", database_url=url, nats_url="nats://nats:4222"))
+    assert "consumer:narrative" in app.state.components
+
+
+def test_rejects_unsupported_backend_chain() -> None:
+    with pytest.raises(ValueError):
+        build_app(Settings(env="test", narrative_chain="online,templat"))
+
+
 def test_refuses_to_start_with_non_dev_database_in_dev() -> None:
     url = SecretStr("postgresql+psycopg://u:p@postgres:5432/astria")
     with pytest.raises(EnvironmentGuardError):

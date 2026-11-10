@@ -31,3 +31,7 @@ class Settings(AstriaSettings):
 
     model_api_key: SecretStr | None = None
     """Kunci API model online (ASTRIA_MODEL_API_KEY). Dilarang di produksi oleh pagar `ASTRIA_ENV`."""
+
+    narrative_chain: str = "replay,templat"
+    """Urutan backend, dipisah koma (ASTRIA_NARRATIVE_CHAIN). Tahap 1: `replay` dan `templat`; `templat` wajib
+    terakhir karena tidak pernah gagal. `online` dan `lokal` menyusul di narrative#4."""
