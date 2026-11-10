@@ -10,7 +10,7 @@
 
 Narasi model bahasa; setiap klaim menunjuk ID bukti.
 
-> Status: Tahap 1 (narrative#3). Konsumen `card.skeleton.created` menerbitkan `narration.completed` lewat outbox dengan rantai backend `replay` lalu `templat`; backend `online` dan `lokal` menyusul (narrative#4). Repo ini adalah submodule dari workspace `triase-dfir` (folder `narrative/`). Rancangan: `notes/2026-11-06-triase-dfir-app-narrative.md` di repo root. Lajur developer: 2.
+> Status: Tahap 1 (narrative#3). Konsumen `card.skeleton.created` (percobaan 1) dan `narration.retry_requested` (percobaan 2) menerbitkan `narration.completed` lewat outbox dengan rantai backend `replay` lalu `templat`; backend `online` dan `lokal` menyusul (narrative#4). Repo ini adalah submodule dari workspace `triase-dfir` (folder `narrative/`). Rancangan: `notes/2026-11-06-triase-dfir-app-narrative.md` di repo root. Lajur developer: 2.
 
 ## Tech stack
 
@@ -34,13 +34,13 @@ Uji integrasi (`tests/test_integration.py`) butuh `ASTRIA_TEST_DATABASE_URL`; di
 
 | Bagian | Isi |
 |---|---|
-| `pipeline.py` | Satu kartu, satu transaksi: cari cache `replay`, bila tidak ada pakai `templat`, lalu `narration.completed` ke outbox (trace dan `card_id` ikut) |
+| `pipeline.py` | Satu kartu, satu transaksi: cari cache `replay`, bila tidak ada pakai `templat`, lalu `narration.completed` ke outbox (trace dan `card_id` ikut). Paket disimpan di `paket_kartu` agar permintaan ulang verifier bisa ditulis sebagai percobaan 2, lalu dihapus setelah percobaan 2 terbit |
 | `template.py` | Narasi deterministik dari `kode` kartu: band, skor, pola, peran tiap entitas, dan judul sebagai hipotesis utama; setiap klaim menunjuk ID bukti kartu |
-| `cache.py` | Tabel `model_call`: kunci `sha256(prompt_versi, paket_hash, params)`, satu baris `ok` per kunci (sumber `replay`), jejak `templat` |
+| `cache.py` | Tabel `model_call`: kunci `sha256(prompt_versi, paket_hash, params)` ditambah kode kegagalan pada percobaan 2, satu baris `ok` per kunci (sumber `replay`), jejak `templat` dengan nomor percobaan |
 | `replay_import.py` | `python -m astria_narrative.replay_import <berkas.jsonl>`: impor keluaran terekam (`card_id`, `version`, `cache_key`, `model_id`, `backend`, `narasi`) |
 
 Konfigurasi: `ASTRIA_NARRATIVE_CHAIN` (bawaan `replay,templat`; wajib diakhiri `templat`). Kode skor dan band tidak pernah diubah.
-`narration.retry_requested` belum ada di kontrak, jadi `attempt` selalu 1.
+Permintaan ulang hanya berisi indeks klaim dan kode gagal, tanpa teks klaim atau kutipan log; tanpa rekaman replay untuk percobaan 2, hasilnya `templat`.
 
 ## Alur git
 

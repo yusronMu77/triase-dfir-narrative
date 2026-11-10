@@ -40,9 +40,9 @@ async def db():
     await database.stop()
 
 
-def _skeleton(card_id: str = "IC-20261110-003", version: int = 1):
-    raw = example("card.skeleton.created")
-    return decode(encode(new_event(raw["type"], raw["data"], correlation={"card_id": card_id, "version": version})))
+def _event(event_type: str, card_id: str = "IC-20261110-003", version: int = 1):
+    raw = example(event_type)["data"]
+    return decode(encode(new_event(event_type, raw, correlation={"card_id": card_id, "version": version})))
 
 
 async def _published(db: Database) -> list:
@@ -52,9 +52,9 @@ async def _published(db: Database) -> list:
 
 
 async def test_template_when_cache_empty(db: Database) -> None:
-    envelope, data = _skeleton()
+    envelope, data = _event("card.skeleton.created")
     async with db.engine.begin() as conn:
-        await CardPipeline(("replay", "templat"))(conn, envelope, data)
+        await CardPipeline(("replay", "templat")).on_kartu(conn, envelope, data)
 
     [(out, narration)] = await _published(db)
     assert out.type == "narration.completed"
@@ -67,7 +67,7 @@ async def test_template_when_cache_empty(db: Database) -> None:
 
 
 async def test_replay_hit_after_import(db: Database) -> None:
-    envelope, data = _skeleton(version=2)
+    envelope, data = _event("card.skeleton.created", version=2)
     recorded = example("narration.completed")["data"]["narasi"]
     key = cache.cache_key(data.paket_hash.root)
     record = {
@@ -80,10 +80,34 @@ async def test_replay_hit_after_import(db: Database) -> None:
     async with db.engine.begin() as conn:
         assert await cache.import_records(conn, [record, record]) == 1
     async with db.engine.begin() as conn:
-        await CardPipeline(("replay", "templat"))(conn, envelope, data)
+        await CardPipeline(("replay", "templat")).on_kartu(conn, envelope, data)
 
     [(_, narration)] = await _published(db)
     assert narration.model.backend == "replay"
     assert narration.model.model_id == "demo-model"
     assert narration.model.cache_hit is True
     assert narration.narasi.model_dump(mode="json") == recorded
+
+
+async def test_retry_writes_attempt_2_from_stored_card(db: Database) -> None:
+    pipeline = CardPipeline(("replay", "templat"))
+    async with db.engine.begin() as conn:
+        await pipeline.on_kartu(conn, *_event("card.skeleton.created"))
+    async with db.engine.begin() as conn:
+        await pipeline.on_ulang(conn, *_event("narration.retry_requested"))
+
+    published = await _published(db)
+    assert [(e.type, d.attempt) for e, d in published] == [("narration.completed", 1), ("narration.completed", 2)]
+    assert published[1][1].model.backend == "templat"
+    async with db.engine.connect() as conn:
+        rows = (await conn.execute(select(cache.model_call.c.attempt, cache.model_call.c.cache_key))).all()
+    assert sorted(r.attempt for r in rows) == [1, 2]
+    assert len({r.cache_key for r in rows}) == 2
+    async with db.engine.connect() as conn:
+        assert (await conn.execute(select(cache.paket_kartu))).first() is None
+
+
+async def test_retry_without_stored_card_fails(db: Database) -> None:
+    async with db.engine.begin() as conn:
+        with pytest.raises(ValueError, match="paket kartu"):
+            await CardPipeline(("templat",)).on_ulang(conn, *_event("narration.retry_requested", version=9))

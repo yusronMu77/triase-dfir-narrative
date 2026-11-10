@@ -1,4 +1,5 @@
-"""Rakit aplikasi narrative: komponen standar (PostgreSQL, NATS, relay outbox), konsumen kartu, dan router.
+"""Rakit aplikasi narrative: komponen standar (PostgreSQL, NATS, relay outbox), konsumen kartu dan permintaan
+ulang, dan router.
 
 Dev memakai `uvicorn astria_narrative.main:build_app --factory --reload`; image memakai `astria-narrative`.
 """
@@ -18,13 +19,10 @@ def build_app(settings: Settings | None = None) -> FastAPI:
     chain = parse_chain(settings.narrative_chain)
     runtime = standard_runtime(settings, metadata=[cache.metadata])
     if runtime.db is not None and runtime.bus is not None:
-        runtime.add(
-            Consumer(
-                runtime.bus,
-                runtime.db,
-                durable="narrative",
-                event_type="card.skeleton.created",
-                handler=CardPipeline(chain),
-            )
-        )
+        pipeline = CardPipeline(chain)
+        for durable, event_type, handler in (
+            ("narrative", "card.skeleton.created", pipeline.on_kartu),
+            ("narrative-ulang", "narration.retry_requested", pipeline.on_ulang),
+        ):
+            runtime.add(Consumer(runtime.bus, runtime.db, durable=durable, event_type=event_type, handler=handler))
     return create_app(settings, components=runtime.components, routers=[api.router])

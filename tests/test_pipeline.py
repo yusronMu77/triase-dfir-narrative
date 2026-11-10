@@ -23,3 +23,10 @@ def test_cache_key_is_deterministic_and_sensitive() -> None:
     assert cache_key(PAKET) != cache_key("sha256:" + "b" * 64)
     assert cache_key(PAKET) != cache_key(PAKET, prompt_versi="narasi-v2")
     assert cache_key(PAKET) != cache_key(PAKET, params={"max_tokens": 400})
+
+
+def test_retry_failures_change_the_key_but_not_attempt_1() -> None:
+    gagal = [(2, "VALID_TAPI_SALAH"), (0, "TANPA_BUKTI")]
+    assert cache_key(PAKET, kegagalan=[]) == cache_key(PAKET)
+    assert cache_key(PAKET, kegagalan=gagal) != cache_key(PAKET)
+    assert cache_key(PAKET, kegagalan=gagal) == cache_key(PAKET, kegagalan=list(reversed(gagal)))

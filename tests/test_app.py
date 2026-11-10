@@ -16,10 +16,10 @@ def test_health_and_ready_without_dependencies() -> None:
         assert "astria_service_info" in client.get("/metrics").text
 
 
-def test_card_consumer_is_wired_when_db_and_nats_configured() -> None:
+def test_card_and_retry_consumers_are_wired_when_db_and_nats_configured() -> None:
     url = SecretStr("postgresql+psycopg://u:p@postgres:5432/narrative_dev")
     app = build_app(Settings(env="dev", database_url=url, nats_url="nats://nats:4222"))
-    assert "consumer:narrative" in app.state.components
+    assert {"consumer:narrative", "consumer:narrative-ulang"} <= set(app.state.components)
 
 
 def test_rejects_unsupported_backend_chain() -> None:
