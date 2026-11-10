@@ -2,12 +2,14 @@
 
 Peta tidak disimpan: dihitung ulang dari `kode` kartu yang sama (urutan entitas di paket), sehingga placeholder untuk
 kartu yang sama selalu sama dan keluaran cache dalam bentuk placeholder bisa dipulihkan kapan pun. Yang disamarkan:
-nilai entitas kartu, di mana pun nilai itu muncul sebagai kata utuh (judul, alasan faktor, nilai entitas). Nilai di
-luar daftar entitas tidak dikenali dan tetap terkirim; verifier menandainya bila muncul di klaim.
+nilai entitas kartu, lalu IP dan token berbentuk identifier (mis. `WS-ADM-04`) di judul dan alasan faktor yang bukan
+entitas (keputusan PM 2026-11-10: nama host di judul tidak boleh keluar). Aturan identifier sama dengan pengenal
+entitas verifier; kode Astria (`EV-`, `P-`, `K-`, `S-`, `IC-`, `T1234`) dan kata umum tidak disamarkan.
 """
 
 from __future__ import annotations
 
+import ipaddress
 import re
 from collections import Counter
 from collections.abc import Callable
@@ -18,22 +20,53 @@ from astria_contracts.events.narration_completed import Narasi
 
 JENIS = {"akun": "AKUN", "host": "HOST", "ip": "IP", "proses": "PROSES", "berkas": "PATH"}
 PLACEHOLDER = re.compile(r"\b(?:AKUN|HOST|IP|PROSES|PATH|ENTITAS)_\d+\b")
+IPV4 = re.compile(r"(?<![\w.])(?:\d{1,3}\.){3}\d{1,3}(?![\w.])")
+IDENT = re.compile(r"[A-Za-z0-9][A-Za-z0-9._\\-]*[A-Za-z0-9]")
+KODE_ASTRIA = re.compile(r"^(?:EV|P|K|S|IC)-|^T\d{4}")
+KATA_UMUM = frozenset({"e-mail", "log-in", "log-on", "non-aktif", "real-time", "follow-up"})
 
 
 class PlaceholderAsing(ValueError):
     """Keluaran memuat placeholder yang tidak ada di peta kartu ini."""
 
 
-def build_map(kode: Kode) -> dict[str, str]:
-    """Peta nilai asli ke placeholder, bernomor menurut kemunculan pertama per jenis."""
-    peta: dict[str, str] = {}
-    nomor: Counter[str] = Counter()
-    for e in kode.entitas:
-        if e.nilai in peta:
+def _identifier(token: str) -> bool:
+    if KODE_ASTRIA.match(token) or token.casefold() in KATA_UMUM or not any(c.isalpha() for c in token):
+        return False
+    bagian = token.casefold().split("-")
+    if len(bagian) > 1 and len(set(bagian)) == 1:
+        return False  # kata ulang: masing-masing
+    return any(c in "._\\-" for c in token) or any(c.isdigit() for c in token)
+
+
+def _teks_bebas(teks: str) -> list[tuple[str, str]]:
+    """(nilai, jenis) untuk IP valid dan identifier di teks bebas, urut kemunculan."""
+    hasil = []
+    for m in IPV4.finditer(teks):
+        try:
+            ipaddress.ip_address(m.group(0))
+        except ValueError:
             continue
-        jenis = JENIS.get(e.jenis, "ENTITAS")
+        hasil.append((m.start(), m.group(0), "IP"))
+    sisa = IPV4.sub(lambda m: " " * len(m.group(0)), teks)
+    hasil += [(m.start(), m.group(0), "ENTITAS") for m in IDENT.finditer(sisa) if _identifier(m.group(0))]
+    return [(nilai, jenis) for _, nilai, jenis in sorted(hasil)]
+
+
+def build_map(kode: Kode) -> dict[str, str]:
+    """Peta nilai asli ke placeholder, bernomor menurut kemunculan pertama per jenis: entitas dulu, lalu teks bebas."""
+    calon = [(e.nilai, JENIS.get(e.jenis, "ENTITAS")) for e in kode.entitas]
+    for teks in (kode.judul, *(f.alasan for f in kode.faktor)):
+        calon += _teks_bebas(teks)
+    peta: dict[str, str] = {}
+    sudah = set()
+    nomor: Counter[str] = Counter()
+    for nilai, jenis in calon:
+        if nilai.casefold() in sudah:
+            continue
+        sudah.add(nilai.casefold())
         nomor[jenis] += 1
-        peta[e.nilai] = f"{jenis}_{nomor[jenis]}"
+        peta[nilai] = f"{jenis}_{nomor[jenis]}"
     return peta
 
 
