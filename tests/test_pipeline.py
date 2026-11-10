@@ -6,12 +6,15 @@ from astria_narrative.pipeline import parse_chain
 PAKET = "sha256:" + "a" * 64
 
 
-def test_parse_chain_accepts_phase_one_backends() -> None:
+def test_parse_chain_accepts_supported_backends() -> None:
     assert parse_chain("replay, templat") == ("replay", "templat")
+    assert parse_chain("replay,online,templat") == ("replay", "online", "templat")
     assert parse_chain("templat") == ("templat",)
 
 
-@pytest.mark.parametrize("raw", ["", "replay", "templat,replay", "online,templat", "replay,lokal,templat"])
+@pytest.mark.parametrize(
+    "raw", ["", "replay", "templat,replay", "online", "replay,templat,online", "replay,lokal,templat"]
+)
 def test_parse_chain_rejects_unsupported_or_unterminated(raw: str) -> None:
     with pytest.raises(ValueError):
         parse_chain(raw)
