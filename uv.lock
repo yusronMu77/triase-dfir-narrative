@@ -96,6 +96,7 @@ source = { editable = "." }
 dependencies = [
     { name = "astria-common", extra = ["otel"] },
     { name = "astria-contracts" },
+    { name = "httpx" },
 ]
 
 [package.dev-dependencies]
@@ -109,6 +110,7 @@ dev = [
 requires-dist = [
     { name = "astria-common", extras = ["otel"], git = "https://github.com/yusronMu77/triase-dfir-common?tag=v0.2.1" },
     { name = "astria-contracts", git = "https://github.com/yusronMu77/triase-dfir-contracts?tag=v0.2.0" },
+    { name = "httpx", specifier = ">=0.28.1,<1" },
 ]
 
 [package.metadata.requires-dev]
