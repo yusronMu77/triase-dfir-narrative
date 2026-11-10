@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.14"
 
 [[package]]
@@ -53,8 +53,8 @@ wheels = [
 
 [[package]]
 name = "astria-common"
-version = "0.2.0"
-source = { git = "https://github.com/yusronMu77/triase-dfir-common?tag=v0.2.0#1bc2f1e6f1a281ca89b8fbe759edc311ee30d2ce" }
+version = "0.2.1"
+source = { git = "https://github.com/yusronMu77/triase-dfir-common?tag=v0.2.1#b85bce326d87fffba5676b26bad8ea881064d73b" }
 dependencies = [
     { name = "aiosqlite" },
     { name = "astria-contracts" },
@@ -83,8 +83,8 @@ otel = [
 
 [[package]]
 name = "astria-contracts"
-version = "0.1.0"
-source = { git = "https://github.com/yusronMu77/triase-dfir-contracts?tag=v0.1.0#90aece1926b0261786fbb2566e0f0499921ef29a" }
+version = "0.2.0"
+source = { git = "https://github.com/yusronMu77/triase-dfir-contracts?tag=v0.2.0#2afa29c332c6fe5164d39cc12d5301b272597370" }
 dependencies = [
     { name = "pydantic" },
 ]
@@ -107,8 +107,8 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "astria-common", extras = ["otel"], git = "https://github.com/yusronMu77/triase-dfir-common?tag=v0.2.0" },
-    { name = "astria-contracts", git = "https://github.com/yusronMu77/triase-dfir-contracts?tag=v0.1.0" },
+    { name = "astria-common", extras = ["otel"], git = "https://github.com/yusronMu77/triase-dfir-common?tag=v0.2.1" },
+    { name = "astria-contracts", git = "https://github.com/yusronMu77/triase-dfir-contracts?tag=v0.2.0" },
 ]
 
 [package.metadata.requires-dev]
