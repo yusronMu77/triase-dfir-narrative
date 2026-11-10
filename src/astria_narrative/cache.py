@@ -5,7 +5,8 @@ Kunci cache dihitung dari versi prompt, `paket_hash` kartu, dan parameter model,
 keluaran terekam bisa diputar ulang di mesin tanpa model. Percobaan 2 menambahkan kode kegagalan dari verifier ke
 kunci, sama seperti kegagalan itu masuk ke prompt (note app-narrative 3.3), sehingga tidak memutar ulang keluaran
 percobaan 1 yang ditolak. Hanya baris `outcome = 'ok'` yang dipakai `replay`;
-indeks unik parsial menjamin satu keluaran per kunci.
+indeks unik parsial menjamin satu keluaran per kunci. Keluaran backend `online` disimpan dalam bentuk placeholder
+samaran dan dipulihkan saat diputar ulang, sehingga rekaman bisa dibagikan sebagai samples tanpa nilai identitas.
 """
 
 from __future__ import annotations
@@ -92,9 +93,12 @@ async def record(
     model_id: str,
     outcome: str,
     output: Narasi | None,
+    latency_ms: int | None = None,
 ) -> None:
+    # Tanpa `replay` di rantai, keluaran `ok` kedua untuk kunci yang sama cukup dilewati.
     await conn.execute(
-        model_call.insert().values(
+        insert(model_call)
+        .values(
             id=str(uuid.uuid4()),
             card_id=card_id,
             version=version,
@@ -104,7 +108,9 @@ async def record(
             model_id=model_id,
             outcome=outcome,
             output=output.model_dump(mode="json") if output is not None else None,
+            latency_ms=latency_ms,
         )
+        .on_conflict_do_nothing(index_elements=["cache_key"], index_where=model_call.c.outcome == "ok")
     )
 
 

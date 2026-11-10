@@ -33,5 +33,11 @@ class Settings(AstriaSettings):
     """Kunci API model online (ASTRIA_MODEL_API_KEY). Dilarang di produksi oleh pagar `ASTRIA_ENV`."""
 
     narrative_chain: str = "replay,templat"
-    """Urutan backend, dipisah koma (ASTRIA_NARRATIVE_CHAIN). Tahap 1: `replay` dan `templat`; `templat` wajib
-    terakhir karena tidak pernah gagal. `online` dan `lokal` menyusul di narrative#4."""
+    """Urutan backend, dipisah koma (ASTRIA_NARRATIVE_CHAIN): `replay`, `online`, `templat`; `templat` wajib
+    terakhir karena tidak pernah gagal. Demo dengan model online: `replay,online,templat`. `lokal` menyusul."""
+    narrative_timeout_s: float = 45.0
+    """Batas satu panggilan model, termasuk resolusi DNS (note app-narrative 5.2)."""
+    narrative_egress_allowlist: str = "api.anthropic.com"
+    """Host yang boleh dihubungi backend online, dipisah koma. Host base URL `openai_compat` wajib ditambahkan."""
+    narrative_egress_allow_private: bool = False
+    """Izinkan host di allowlist yang mengarah ke alamat privat atau loopback (server model privat)."""

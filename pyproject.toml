@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Narasi model bahasa; setiap klaim menunjuk ID bukti."
 readme = "README.md"
 requires-python = ">=3.14"
-dependencies = ["astria-common[otel]", "astria-contracts"]
+dependencies = ["astria-common[otel]", "astria-contracts", "httpx>=0.28.1,<1"]
 
 [project.scripts]
 astria-narrative = "astria_narrative.__main__:main"
