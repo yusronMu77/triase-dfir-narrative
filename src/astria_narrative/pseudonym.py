@@ -24,6 +24,8 @@ IPV4 = re.compile(r"(?<![\w.])(?:\d{1,3}\.){3}\d{1,3}(?![\w.])")
 IDENT = re.compile(r"[A-Za-z0-9][A-Za-z0-9._\\-]*[A-Za-z0-9]")
 KODE_ASTRIA = re.compile(r"^(?:EV|P|K|S|IC)-|^T\d{4}")
 KATA_UMUM = frozenset({"e-mail", "log-in", "log-on", "non-aktif", "real-time", "follow-up"})
+MIN_POTONGAN = 4
+"""Panjang minimum awal nilai entitas di ujung judul terpotong yang dianggap potongan nilai itu."""
 
 
 class PlaceholderAsing(ValueError):
@@ -80,6 +82,23 @@ def _walk(obj: Any, fn: Callable[[str], str]) -> Any:
     return obj
 
 
+def _rapat(nilai: str) -> str:
+    return " ".join(nilai.split())
+
+
+def _ujung_terpotong(judul: str, peta: dict[str, str]) -> str:
+    """Judul triage dipotong 200 karakter dengan "…"; awal nilai entitas yang terpotong di ujungnya ikut disamarkan."""
+    if not judul.endswith("…"):
+        return judul
+    badan = judul[:-1]
+    for nilai, ph in sorted(peta.items(), key=lambda kv: len(kv[0]), reverse=True):
+        rapat = _rapat(nilai)  # triage menyisipkan nilai entitas apa adanya (dirapatkan), jadi cocok persis
+        for k in range(len(rapat), MIN_POTONGAN - 1, -1):
+            if badan.endswith(rapat[:k]):
+                return badan[: len(badan) - k] + ph + "…"
+    return judul
+
+
 def samarkan(kode: Kode, peta: dict[str, str]) -> dict[str, Any]:
     """`kode` sebagai dict JSON dengan nilai entitas diganti placeholder."""
     paket = kode.model_dump(mode="json", exclude_none=True)
@@ -87,10 +106,13 @@ def samarkan(kode: Kode, peta: dict[str, str]) -> dict[str, Any]:
         return paket
     # Nilai terpanjang dulu, dan hanya sebagai kata utuh: `10.0.0.1` tidak memotong `10.0.0.15`, dan nilai pendek
     # tidak merusak ID bukti seperti `EV-hb01-004217`. Tanpa beda huruf besar-kecil (`WS-ADM-04` = `ws-adm-04`).
-    per_huruf = {k.casefold(): v for k, v in peta.items()}
-    nilai = sorted(peta, key=len, reverse=True)
-    pola = re.compile("|".join(rf"(?<![\w-]){re.escape(v)}(?![\w-])" for v in nilai), re.IGNORECASE)
-    return _walk(paket, lambda s: pola.sub(lambda m: per_huruf[m.group(0).casefold()], s))
+    # Spasi dicocokkan longgar karena triage merapatkan spasi nilai di judul (`pola.isi_judul`), tidak di entitas.
+    per_huruf = {_rapat(k).casefold(): v for k, v in peta.items()}
+    nilai = sorted((v for v in peta if v.split()), key=len, reverse=True)
+    isi = (r"\s+".join(map(re.escape, v.split())) for v in nilai)
+    pola = re.compile("|".join(rf"(?<![\w-]){p}(?![\w-])" for p in isi), re.IGNORECASE)
+    paket["judul"] = _ujung_terpotong(paket["judul"], peta)
+    return _walk(paket, lambda s: pola.sub(lambda m: per_huruf[_rapat(m.group(0)).casefold()], s))
 
 
 def restore(narasi: Narasi, peta: dict[str, str]) -> Narasi:
