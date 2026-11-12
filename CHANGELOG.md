@@ -4,6 +4,7 @@
 
 ### Changed
 
+- Samaran tahan spasi dan pemotongan judul (temuan lab injeksi e2e#2): nilai entitas dicocokkan dengan spasi longgar karena triage merapatkan spasi saat mengisi `judul`, dan awal nilai entitas yang terpotong di ujung judul 200 karakter (`…`) ikut disamarkan. Sebelumnya nama akun berisi spasi ganda, baris baru, atau lebih dari sekitar 170 karakter keluar ke model tanpa samaran lewat `judul`.
 - Samaran juga mencakup IP dan token berbentuk identifier di `judul` dan `faktor.alasan` yang bukan entitas (keputusan PM 2026-11-10, temuan uji narrative#5: host di judul ikut terkirim ke provider). Aturan identifier sama dengan pengenal entitas verifier; nomor placeholder entitas tidak berubah, jadi keluaran cache lama tetap bisa dipulihkan.
 
 ### Added
