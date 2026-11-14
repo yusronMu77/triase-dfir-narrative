@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
+from astria_common.envguard import EnvironmentGuardError
 from astria_common.events import new_event
 from astria_common.log import get_logger
 from astria_common.outbox import enqueue
@@ -44,6 +45,29 @@ def parse_chain(raw: str) -> tuple[str, ...]:
     if not chain or chain[-1] != "templat":
         raise ValueError("rantai backend wajib diakhiri 'templat'")
     return chain
+
+
+PROD_FORBIDDEN = ("replay", "online")
+"""`replay` memutar rekaman demo, `online` memanggil model daring: keduanya dilarang di `ASTRIA_ENV=prod`."""
+
+
+def enforce_env(env: str, chain: Sequence[str]) -> None:
+    """Pagar `ASTRIA_ENV` khusus narrative (infra#9); dipanggil sebelum runtime dirakit atau cache disentuh.
+
+    Pagar bersama `astria_common.envguard` hanya membaca field tunggal `model_backend`, sedangkan narrative memakai
+    rantai `ASTRIA_NARRATIVE_CHAIN` (bawaan `replay,templat`), jadi aturannya diperiksa di sini.
+    """
+    if env != "prod":
+        return
+    forbidden = [b for b in chain if b in PROD_FORBIDDEN]
+    if forbidden:
+        raise EnvironmentGuardError(
+            env,
+            [
+                f"backend narasi {', '.join(forbidden)} dilarang di produksi "
+                "(replay = rekaman demo, online = model daring); pakai ASTRIA_NARRATIVE_CHAIN=templat"
+            ],
+        )
 
 
 def _kartu(envelope: Envelope) -> tuple[str, int]:

@@ -11,6 +11,8 @@ import sys
 from pathlib import Path
 
 import orjson
+from astria_common import envguard
+from astria_common.envguard import EnvironmentGuardError
 from astria_common.service import standard_runtime
 
 from astria_narrative import cache
@@ -31,8 +33,13 @@ async def run(records: list[dict], settings: Settings) -> int:
 def main() -> None:
     if len(sys.argv) != 2:
         raise SystemExit("pemakaian: python -m astria_narrative.replay_import <berkas.jsonl>")
+    settings = Settings()
+    # Rekaman replay adalah data demo: ditolak di prod sebelum berkas dibaca atau basis data dibuka (infra#9).
+    if settings.env == "prod":
+        raise EnvironmentGuardError(settings.env, ["impor rekaman replay (data demo) dilarang di produksi"])
+    envguard.enforce(settings)
     lines = Path(sys.argv[1]).read_text(encoding="utf-8").splitlines()
-    imported = asyncio.run(run([orjson.loads(line) for line in lines if line.strip()], Settings()))
+    imported = asyncio.run(run([orjson.loads(line) for line in lines if line.strip()], settings))
     print(f"diimpor {imported} keluaran")
 
 
