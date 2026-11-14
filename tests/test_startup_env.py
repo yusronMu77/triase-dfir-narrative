@@ -116,7 +116,9 @@ def test_prod_refuses_sqlite_before_touching_it(
     assert not database.exists()
 
 
-@pytest.mark.parametrize("chain", [None, "replay,templat", "online,templat", "replay,online,templat"])
+@pytest.mark.parametrize(
+    "chain", [None, "replay,templat", "online,templat", "replay,online,templat", "replay,lokal,templat"]
+)
 def test_prod_refuses_demo_or_online_backends(
     monkeypatch: pytest.MonkeyPatch, served: list[str], chain: str | None
 ) -> None:
@@ -134,6 +136,20 @@ def test_replay_chain_still_allowed_outside_prod(monkeypatch: pytest.MonkeyPatch
     _set(monkeypatch, env, {**valid_config(env), "ASTRIA_NARRATIVE_CHAIN": "replay,online,templat"})
     start()
     assert served == [env]
+
+
+@pytest.mark.parametrize("model_id", [None, "lfm2.5-1.2b-instruct-q4_k_m"])
+def test_prod_allows_local_model_chain(
+    monkeypatch: pytest.MonkeyPatch, served: list[str], model_id: str | None
+) -> None:
+    """`lokal` = model sendiri di jaringan privat, boleh di produksi; tanpa model id backend dilewati ke templat."""
+    values = {**valid_config("prod"), "ASTRIA_NARRATIVE_CHAIN": "lokal,templat"}
+    if model_id is not None:
+        values["ASTRIA_NARRATIVE_LOCAL_MODEL_ID"] = model_id
+        values["ASTRIA_NARRATIVE_LOCAL_BASE_URL"] = "http://10.184.0.10:8080/v1"
+    _set(monkeypatch, "prod", values)
+    start()
+    assert served == ["prod"]
 
 
 def test_replay_import_refused_in_prod_before_reading(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

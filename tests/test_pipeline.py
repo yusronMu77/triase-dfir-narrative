@@ -10,10 +10,12 @@ def test_parse_chain_accepts_supported_backends() -> None:
     assert parse_chain("replay, templat") == ("replay", "templat")
     assert parse_chain("replay,online,templat") == ("replay", "online", "templat")
     assert parse_chain("templat") == ("templat",)
+    assert parse_chain("replay,lokal,templat") == ("replay", "lokal", "templat")
+    assert parse_chain("lokal,online,templat") == ("lokal", "online", "templat")
 
 
 @pytest.mark.parametrize(
-    "raw", ["", "replay", "templat,replay", "online", "replay,templat,online", "replay,lokal,templat"]
+    "raw", ["", "replay", "templat,replay", "online", "replay,templat,online", "lokal,lokal,templat", "vllm,templat"]
 )
 def test_parse_chain_rejects_unsupported_or_unterminated(raw: str) -> None:
     with pytest.raises(ValueError):
