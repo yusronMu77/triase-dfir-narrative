@@ -4,6 +4,8 @@
 
 ### Changed
 
+- infra#9: `ASTRIA_ENV=prod` menolak start bila `ASTRIA_NARRATIVE_CHAIN` memuat `replay` atau `online` (termasuk rantai bawaan `replay,templat`), sebelum runtime dirakit; pagar bersama hanya membaca field `model_backend` yang tidak dimiliki narrative, jadi rekaman demo sebelumnya bisa aktif di produksi. `replay_import` juga ditolak di `prod`. Uji `tests/test_startup_env.py` lewat titik masuk `astria-narrative`.
+
 - Samaran tahan spasi dan pemotongan judul (temuan lab injeksi e2e#2): nilai entitas dicocokkan dengan spasi longgar karena triage merapatkan spasi saat mengisi `judul`, dan awal nilai entitas yang terpotong di ujung judul 200 karakter (`…`) ikut disamarkan. Sebelumnya nama akun berisi spasi ganda, baris baru, atau lebih dari sekitar 170 karakter keluar ke model tanpa samaran lewat `judul`.
 - Samaran juga mencakup IP dan token berbentuk identifier di `judul` dan `faktor.alasan` yang bukan entitas (keputusan PM 2026-11-10, temuan uji narrative#5: host di judul ikut terkirim ke provider). Aturan identifier sama dengan pengenal entitas verifier; nomor placeholder entitas tidak berubah, jadi keluaran cache lama tetap bisa dipulihkan.
 

@@ -45,6 +45,10 @@ Uji integrasi (`tests/test_integration.py`) butuh `ASTRIA_TEST_DATABASE_URL`; di
 
 Konfigurasi: `ASTRIA_NARRATIVE_CHAIN` (bawaan `replay,templat`; wajib diakhiri `templat`). Kode skor dan band tidak pernah diubah.
 
+Pagar `ASTRIA_ENV=prod` (infra#9): `replay` (rekaman demo) dan `online` (model daring) dilarang, jadi produksi wajib
+`ASTRIA_NARRATIVE_CHAIN=templat` (backend `lokal` menyusul); rantai bawaan membuat layanan menolak start. Impor
+`replay_import` juga ditolak di `prod` sebelum berkas dibaca. `dev`, `demo`, dan `test` tidak berubah.
+
 Backend `online` untuk demo (contoh nilai; kunci hanya dari env atau berkas secret, tidak pernah di repo):
 
 | Variabel | Contoh | Keterangan |
