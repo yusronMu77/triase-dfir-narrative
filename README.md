@@ -34,11 +34,12 @@ Uji integrasi (`tests/test_integration.py`) butuh `ASTRIA_TEST_DATABASE_URL`; di
 
 | Bagian | Isi |
 |---|---|
-| `pipeline.py` | Satu kartu, satu transaksi: cari cache `replay`, lalu `online`, lalu `templat`, dan `narration.completed` ke outbox (trace dan `card_id` ikut). Setiap percobaan `online` dicatat di `model_call` (`ok`, `skema_gagal`, `placeholder_asing`, `batas_waktu`, `backend_gagal`, `egress_ditolak`); keluaran `ok` disimpan dalam bentuk samaran dan diputar ulang oleh `replay`. Paket disimpan di `paket_kartu` agar permintaan ulang verifier bisa ditulis sebagai percobaan 2, lalu dihapus setelah percobaan 2 terbit |
+| `pipeline.py` | Satu kartu, satu transaksi: cari cache `replay`, lalu backend model di rantai (`online`, `lokal`), lalu `templat`, dan `narration.completed` ke outbox (trace dan `card_id` ikut). Setiap percobaan `online` dan `lokal` dicatat di `model_call` (`ok`, `skema_gagal`, `placeholder_asing`, `batas_waktu`, `backend_gagal`, `egress_ditolak`); keluaran `ok` disimpan dalam bentuk samaran dan diputar ulang oleh `replay`. Paket disimpan di `paket_kartu` agar permintaan ulang verifier bisa ditulis sebagai percobaan 2, lalu dihapus setelah percobaan 2 terbit |
 | `pseudonym.py` | Samaran: nilai entitas kartu menjadi `AKUN_1`, `HOST_1`, `IP_1`, dan seterusnya di seluruh paket sebelum keluar, ditambah IP dan identifier lain di judul dan alasan faktor (mis. host yang bukan entitas menjadi `ENTITAS_n`; kode Astria dan kata umum tidak); peta dihitung ulang dari kartu, tidak disimpan. Keluaran dipulihkan ke nilai asli; placeholder yang tidak dikenal berarti `placeholder_asing` dan backend berikutnya dicoba |
 | `prompt.py` | Petunjuk Bahasa Indonesia dan paket kartu di dalam pagar `<<DATA:sha256>>`; percobaan 2 hanya menambahkan indeks klaim dan kode kegagalan |
 | `online.py` | Adaptor httpx tipis untuk API Messages Anthropic (`POST /v1/messages`) dan endpoint OpenAI-compatible (`POST {base}/chat/completions`), tanpa LiteLLM: batas waktu, validasi kontrak `Narasi` (`extra=forbid`), log tanpa kunci, prompt, atau keluaran |
-| `egress.py` | Hanya https ke host di allowlist yang tidak mengarah ke alamat privat, loopback, atau link-local (kecuali diizinkan eksplisit) |
+| `lokal.py` | Backend `lokal`: llama-server OpenAI-compatible di jaringan sendiri, dengan `response_format` JSON schema per kartu (ID bukti berupa enum milik kartu, teks hanya boleh memuat placeholder kartu itu), kunci `ASTRIA_NARRATIVE_LOCAL_API_KEY` sendiri, batas sambung pendek |
+| `egress.py` | `online`: hanya https ke host di allowlist yang tidak mengarah ke alamat privat, loopback, atau link-local (kecuali diizinkan eksplisit). `lokal` (`check_lokal`): kebalikannya, hanya alamat privat atau loopback; link-local (metadata 169.254.169.254), multicast, dan alamat publik ditolak sebelum kirim |
 | `template.py` | Narasi deterministik dari `kode` kartu: band, skor, pola, peran tiap entitas, dan judul sebagai hipotesis utama; setiap klaim menunjuk ID bukti kartu |
 | `cache.py` | Tabel `model_call`: kunci `sha256(prompt_versi, paket_hash, params)` ditambah kode kegagalan pada percobaan 2, satu baris `ok` per kunci (sumber `replay`), jejak `templat` dengan nomor percobaan |
 | `replay_import.py` | `python -m astria_narrative.replay_import <berkas.jsonl>`: impor keluaran terekam (`card_id`, `version`, `cache_key`, `model_id`, `backend`, `narasi`) |
@@ -46,7 +47,7 @@ Uji integrasi (`tests/test_integration.py`) butuh `ASTRIA_TEST_DATABASE_URL`; di
 Konfigurasi: `ASTRIA_NARRATIVE_CHAIN` (bawaan `replay,templat`; wajib diakhiri `templat`). Kode skor dan band tidak pernah diubah.
 
 Pagar `ASTRIA_ENV=prod` (infra#9): `replay` (rekaman demo) dan `online` (model daring) dilarang, jadi produksi wajib
-`ASTRIA_NARRATIVE_CHAIN=templat` (backend `lokal` menyusul); rantai bawaan membuat layanan menolak start. Impor
+`ASTRIA_NARRATIVE_CHAIN=templat` atau `lokal,templat`; rantai bawaan membuat layanan menolak start. Impor
 `replay_import` juga ditolak di `prod` sebelum berkas dibaca. `dev`, `demo`, dan `test` tidak berubah.
 
 Backend `online` untuk demo (contoh nilai; kunci hanya dari env atau berkas secret, tidak pernah di repo):
@@ -61,6 +62,17 @@ Backend `online` untuk demo (contoh nilai; kunci hanya dari env atau berkas secr
 | `ASTRIA_NARRATIVE_EGRESS_ALLOWLIST` | `api.anthropic.com` | host base URL `openai_compat` wajib ditambahkan |
 | `ASTRIA_NARRATIVE_EGRESS_ALLOW_PRIVATE` | `false` | `true` hanya untuk server model privat |
 | `ASTRIA_NARRATIVE_TIMEOUT_S` | `45` | batas satu panggilan, lewat dari itu `batas_waktu` |
+
+Backend `lokal` (model di server sendiri, boleh di `prod`; demo: VM `astria-demo-llm`, lihat `infra/iac/README.md`):
+
+| Variabel | Contoh | Keterangan |
+|---|---|---|
+| `ASTRIA_NARRATIVE_CHAIN` | `replay,lokal,templat` (demo), `lokal,templat` (prod) | `lokal` di rantai |
+| `ASTRIA_NARRATIVE_LOCAL_BASE_URL` | `http://10.184.0.4:8080/v1` | bawaan `http://llama:8080/v1`; harus alamat privat atau loopback |
+| `ASTRIA_NARRATIVE_LOCAL_MODEL_ID` | `lfm2.5-1.2b-instruct-q4_k_m` | kosong berarti `lokal` nonaktif dan rantai lanjut |
+| `ASTRIA_NARRATIVE_LOCAL_API_KEY` | `<kunci>` | kunci llama-server; `ASTRIA_MODEL_API_KEY` tidak pernah dipakai |
+| `ASTRIA_NARRATIVE_LOCAL_TIMEOUT_S` | `90` | batas satu panggilan (CPU t2d-standard-2: p50 22,8 s, p95 40 s) |
+| `ASTRIA_NARRATIVE_LOCAL_CONNECT_TIMEOUT_S` | `3` | VM model mati gagal cepat ke `templat` |
 
 Anthropic dipanggil dengan `anthropic-version: 2026-10-21`, `max_tokens` 800, dan `output_config.effort` `low`, tanpa
 `temperature` (versi API ini menolaknya; model terkini hanya menerima nilai bawaan), jadi id model harus model

@@ -24,7 +24,7 @@ def test_card_and_retry_consumers_are_wired_when_db_and_nats_configured() -> Non
 
 def test_rejects_unsupported_backend_chain() -> None:
     with pytest.raises(ValueError):
-        build_app(Settings(env="test", narrative_chain="replay,lokal,templat"))
+        build_app(Settings(env="test", narrative_chain="replay,vllm,templat"))
 
 
 def test_refuses_to_start_with_non_dev_database_in_dev() -> None:

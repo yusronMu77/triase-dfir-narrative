@@ -1,8 +1,9 @@
 """Satu kartu, satu transaksi: `card.skeleton.created` masuk, `narration.completed` keluar lewat outbox.
 
-Rantai backend dicoba berurutan. `replay` hanya membaca cache `model_call` (tanpa jaringan); `online` memanggil model
-dengan paket yang disamarkan lalu memulihkan placeholder; `templat` selalu berhasil sehingga kartu tetap terbit.
-Setiap percobaan `online` dicatat di `model_call`, dan keluaran `ok`-nya menjadi sumber `replay` berikutnya.
+Rantai backend dicoba berurutan. `replay` hanya membaca cache `model_call` (tanpa jaringan); `online` (model daring)
+dan `lokal` (model sendiri di jaringan privat) memanggil model dengan paket yang disamarkan lalu memulihkan placeholder;
+`templat` selalu berhasil sehingga kartu tetap terbit. Setiap percobaan model dicatat di `model_call`, dan keluaran
+`ok`-nya menjadi sumber `replay` berikutnya.
 Kode skor dan band tidak pernah diubah di sini.
 
 Bila verifier meminta ulang (`narration.retry_requested`, hanya kode kegagalan), percobaan 2 memakai paket yang
@@ -33,7 +34,7 @@ from astria_narrative.template import build_narasi
 
 log = get_logger(__name__)
 
-SUPPORTED = ("replay", "online", "templat")
+SUPPORTED = ("replay", "online", "lokal", "templat")
 TEMPLAT_MODEL_ID = "templat-v1"
 
 
@@ -44,11 +45,14 @@ def parse_chain(raw: str) -> tuple[str, ...]:
         raise ValueError(f"backend belum didukung: {unknown} (didukung: {', '.join(SUPPORTED)})")
     if not chain or chain[-1] != "templat":
         raise ValueError("rantai backend wajib diakhiri 'templat'")
+    if len(set(chain)) != len(chain):
+        raise ValueError("backend tidak boleh diulang di rantai")
     return chain
 
 
 PROD_FORBIDDEN = ("replay", "online")
-"""`replay` memutar rekaman demo, `online` memanggil model daring: keduanya dilarang di `ASTRIA_ENV=prod`."""
+"""`replay` memutar rekaman demo, `online` memanggil model daring: keduanya dilarang di `ASTRIA_ENV=prod`.
+`lokal` boleh: pagar egress-nya hanya mengizinkan alamat privat atau loopback (`egress.check_lokal`)."""
 
 
 def enforce_env(env: str, chain: Sequence[str]) -> None:
@@ -65,7 +69,8 @@ def enforce_env(env: str, chain: Sequence[str]) -> None:
             env,
             [
                 f"backend narasi {', '.join(forbidden)} dilarang di produksi "
-                "(replay = rekaman demo, online = model daring); pakai ASTRIA_NARRATIVE_CHAIN=templat"
+                "(replay = rekaman demo, online = model daring); "
+                "pakai ASTRIA_NARRATIVE_CHAIN=templat atau lokal,templat"
             ],
         )
 
@@ -80,9 +85,12 @@ def _kartu(envelope: Envelope) -> tuple[str, int]:
 class CardPipeline:
     """Handler dua konsumen: `card.skeleton.created` (percobaan 1) dan `narration.retry_requested` (percobaan 2)."""
 
-    def __init__(self, chain: Sequence[str], online: OnlineBackend | None = None) -> None:
+    def __init__(
+        self, chain: Sequence[str], online: OnlineBackend | None = None, lokal: OnlineBackend | None = None
+    ) -> None:
         self.chain = tuple(chain)
-        self.online = online
+        self.model = {"online": online, "lokal": lokal}
+        """Backend model per nama rantai; None = nonaktif (tidak dikonfigurasi) dan dilewati."""
 
     async def on_kartu(self, conn: AsyncConnection, envelope: Envelope, data: BaseModel) -> None:
         assert isinstance(data, CardSkeletonCreated)
@@ -169,8 +177,11 @@ class CardPipeline:
                     log.warning("replay_placeholder_asing", card_id=card_id, attempt=attempt, cache_key=key)
             else:
                 log.info("replay_tidak_ada", card_id=card_id, attempt=attempt, cache_key=key)
-        if self.online is not None:
-            hasil = await self.online.narrate(pseudonym.samarkan(data.kode, peta), kegagalan)
+        for nama in self.chain:
+            backend = self.model.get(nama)
+            if backend is None:
+                continue
+            hasil = await backend.narrate(pseudonym.samarkan(data.kode, peta), kegagalan)
             outcome, narasi = hasil.outcome, None
             if hasil.narasi is not None:
                 try:
@@ -183,14 +194,14 @@ class CardPipeline:
                 version=version,
                 attempt=attempt,
                 key=key,
-                backend="online",
-                model_id=self.online.model_id,
+                backend=nama,
+                model_id=backend.model_id,
                 outcome=outcome,
                 output=hasil.narasi if narasi is not None else None,  # bentuk placeholder, bukan nilai asli
                 latency_ms=hasil.latency_ms,
             )
             if narasi is not None:
-                return "online", self.online.model_id, narasi, False
+                return nama, backend.model_id, narasi, False
         # templat: ujung rantai, selalu berhasil; jejaknya dicatat di model_call.
         narasi = build_narasi(data.kode)
         await cache.record(

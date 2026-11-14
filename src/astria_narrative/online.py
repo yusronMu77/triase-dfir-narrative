@@ -47,6 +47,9 @@ def parse_narasi(text: str) -> Narasi:
 
 
 class OnlineBackend:
+    role = "online"
+    log_event = "panggilan_online"
+
     def __init__(
         self,
         cfg: ProviderConfig,
@@ -56,11 +59,15 @@ class OnlineBackend:
         timeout_s: float = 45.0,
         transport: httpx.AsyncBaseTransport | None = None,
         resolver: egress.Resolver = egress.resolve,
+        connect_timeout_s: float | None = None,
     ) -> None:
         self.cfg = cfg
         self.allowlist = allowlist
         self.allow_private = allow_private
         self.timeout_s = timeout_s
+        self.connect_timeout_s = connect_timeout_s
+        """Batas buka koneksi saja; None = sama dengan `timeout_s`. Backend lokal memakai batas pendek agar VM model
+        yang mati tidak menahan setiap kartu sampai `timeout_s`."""
         self.transport = transport
         self.resolver = resolver
 
@@ -97,10 +104,18 @@ class OnlineBackend:
             return "".join(b["text"] for b in body["content"] if b.get("type") == "text")
         return body["choices"][0]["message"]["content"]
 
-    async def _call(self, url: str, headers: dict[str, str], body: dict[str, Any]) -> Narasi:
+    def _body_extra(self, paket: dict[str, Any]) -> dict[str, Any]:
+        """Field tambahan permintaan per paket (backend lokal: skema JSON); online tidak menambah apa pun."""
+        return {}
+
+    async def _check_egress(self, url: str) -> None:
         await egress.check(url, self.allowlist, allow_private=self.allow_private, resolver=self.resolver)
+
+    async def _call(self, url: str, headers: dict[str, str], body: dict[str, Any]) -> Narasi:
+        await self._check_egress(url)
+        timeout = httpx.Timeout(self.timeout_s, connect=self.connect_timeout_s or self.timeout_s)
         async with httpx.AsyncClient(
-            timeout=self.timeout_s, follow_redirects=False, trust_env=False, transport=self.transport
+            timeout=timeout, follow_redirects=False, trust_env=False, transport=self.transport
         ) as client:
             response = await client.post(url, headers=headers, json=body)
         response.raise_for_status()
@@ -110,6 +125,7 @@ class OnlineBackend:
         """Satu panggilan untuk paket yang sudah disamarkan. Tidak pernah melempar galat backend."""
         system, user = prompt.build(paket, kegagalan)
         url, headers, body = self._request(system, user)
+        body.update(self._body_extra(paket))
         narasi, alasan = None, None
         mulai = time.monotonic()
         try:
@@ -128,7 +144,7 @@ class OnlineBackend:
             outcome, alasan = "skema_gagal", type(exc).__name__
         latency_ms = round((time.monotonic() - mulai) * 1000)
         log.info(
-            "panggilan_online",
+            self.log_event,
             provider=self.cfg.provider,
             model_id=self.cfg.model_id,
             outcome=outcome,
